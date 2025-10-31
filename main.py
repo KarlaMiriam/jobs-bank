@@ -42,6 +42,7 @@ RELAXED_SOURCES = {
     "hilton",
     "walmart",
     "icims",
+    "workday",
 }
 
 def sort_rows_for_business(rows):
@@ -103,11 +104,23 @@ def main():
 
         # chama o scraper certo
         if src_type == "greenhouse":
-            jobs = fetch_greenhouse(src["slug"])
+            jobs = fetch_greenhouse(
+                src["slug"],
+                company_name=src.get("company")
+            )
         elif src_type == "lever":
-            jobs = fetch_lever(src["company"])
+            jobs = fetch_lever(
+                company=src["company"],
+                include_departments=src.get("include_departments"),
+                include_keywords=src.get("include_keywords"),
+                exclude_keywords=src.get("exclude_keywords"),
+            )
         elif src_type == "workday":
-            jobs = fetch_workday(src["url"])
+            jobs = fetch_workday(
+                src["url"],
+                employer=src.get("company") or src.get("name"),
+                max_pages=src.get("pages", 40),
+            )
         elif src_type == "mchire":
             jobs = fetch_mchire(src["url"])
         elif src_type == "ihg":
@@ -132,7 +145,7 @@ def main():
 
             # 👉 FILTRO DE LOCALIZAÇÃO (ajustado)
             # regra antiga: só McHire podia vir sem localização
-            # regra nova: McHire + fontes que você passou manualmente (wendys, ihg, hilton, walmart, icims)
+            # regra nova: McHire + fontes que você passou manualmente (wendys, ihg, hilton, walmart, icims, workday)
             if source_name not in ("mchire",) and source_name not in RELAXED_SOURCES:
                 # aqui sim vamos exigir EUA
                 if raw_loc and not is_us_location(raw_loc):

@@ -1,7 +1,7 @@
 # scrapers/greenhouse.py
 import requests
 
-def fetch_greenhouse(slug: str):
+def fetch_greenhouse(slug: str, company_name: str | None = None):
     """
     Busca vagas no Greenhouse para o board informado.
     Retorna SEMPRE uma lista de dicionários com:
@@ -37,7 +37,7 @@ def fetch_greenhouse(slug: str):
             "source": "greenhouse",
             "external_id": str(external_id),
             "title": title,
-            "company": slug,
+            "company": company_name or slug,
             "description": desc,
             "location": loc,
             "salary": "",
