@@ -1,11 +1,17 @@
-# scrapers/__init__.py
-
-from .greenhouse import fetch_greenhouse
-from .lever import fetch_lever
-from .workday import fetch_workday
 from .mchire import fetch_mchire
+from .greenhouse import fetch_greenhouse
+from .workday import fetch_workday
 from .ihg import fetch_ihg
-from .wendys import fetch_wendys
-from .walmart import fetch_walmart
 from .hilton_html import fetch_hilton_html
+from .walmart import fetch_walmart
 from .icims import fetch_icims
+
+__all__ = [
+    "fetch_mchire",
+    "fetch_greenhouse",
+    "fetch_workday",
+    "fetch_ihg",
+    "fetch_hilton_html",
+    "fetch_walmart",
+    "fetch_icims",
+]

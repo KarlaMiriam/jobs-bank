@@ -2,34 +2,68 @@
 import requests
 from bs4 import BeautifulSoup
 
+
 def fetch_ihg(url: str):
-    resp = requests.get(url, timeout=20, headers={"User-Agent": "Mozilla/5.0"})
-    if resp.status_code != 200:
-        return []
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                      "AppleWebKit/537.36 (KHTML, like Gecko) "
+                      "Chrome/121.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Referer": "https://careers.ihg.com/",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+    try:
+        resp = requests.get(url, timeout=20, headers=headers)
+        resp.raise_for_status()
+    except Exception as e:
+        print(f"[ihg] erro ao buscar {url}: {e}")
+        # mesmo assim, devolve uma vaga genérica, pra não perder a fonte
+        return [
+            {
+                "source": "ihg",
+                "external_id": url,
+                "title": "IHG Job",
+                "company": "IHG",
+                "description": "Job description not available.",
+                "city": "",
+                "state": "",
+                "country": "US",
+                "salary": "",
+                "url": url,
+                "category": "hotel",
+                "priority": 4000,
+                "active": True,
+            }
+        ]
 
     soup = BeautifulSoup(resp.text, "html.parser")
+    title = soup.find("h1")
+    job_title = title.get_text(strip=True) if title else "IHG Job"
 
-    title_el = soup.find("h1")
-    title = title_el.get_text(strip=True) if title_el else "IHG Job"
-
-    # tentativa de pegar localização
     location = ""
-    for li in soup.find_all("li"):
-        txt = li.get_text(" ", strip=True)
-        if "Location" in txt:
-            location = txt.split(":", 1)[-1].strip()
-            break
+    loc_el = soup.find("div", class_="job-location")
+    if loc_el:
+        location = loc_el.get_text(" ", strip=True)
 
-    desc_el = soup.find("div", class_="description") or soup.find("div", id="description")
-    description = desc_el.get_text("\n", strip=True) if desc_el else ""
+    desc = ""
+    desc_el = soup.find("div", class_="job-description")
+    if desc_el:
+        desc = desc_el.get_text("\n", strip=True)
 
-    return [{
-        "source": "ihg",
-        "external_id": url,
-        "title": title,
-        "company": "IHG Hotels & Resorts",
-        "description": description,
-        "location": location,
-        "salary": "",
-        "url": url,
-    }]
+    return [
+        {
+            "source": "ihg",
+            "external_id": url,
+            "title": job_title,
+            "company": "IHG",
+            "description": desc or "Job description not available.",
+            "city": location,
+            "state": "",
+            "country": "US",
+            "salary": "",
+            "url": url,
+            "category": "hotel",
+            "priority": 4000,
+            "active": True,
+        }
+    ]

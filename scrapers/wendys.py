@@ -11,7 +11,7 @@ from urllib3.util.retry import Retry
 
 BASE_URL = "https://wendys-careers.com"
 JOB_PATH_FRAGMENT = "/job-search/posting/"
-DEFAULT_PAGES = 5
+DEFAULT_PAGES = 3
 USER_AGENT = "Mozilla/5.0 (compatible; JobBot/1.0; +https://jobs-bank)"
 ACCEPT_HEADER = "text/html,application/xhtml+xml"
 
@@ -85,7 +85,7 @@ def _collect_links_from_listing(session: requests.Session, listing_url: str) -> 
     return links
 
 
-def fetch_wendys(url: str):
+def fetch_wendys(url: str, pages: Optional[int] = None, max_jobs: Optional[int] = None):
     """
     Scrapes Wendy's listings. When a listing page is provided,
     it paginates through the first DEFAULT_PAGES (or the value passed via ?pages=)
@@ -111,7 +111,7 @@ def fetch_wendys(url: str):
     parsed = urlparse(url)
     query_pairs = parse_qsl(parsed.query)
 
-    pages_to_scan = DEFAULT_PAGES
+    pages_to_scan = pages if pages is not None else DEFAULT_PAGES
     filtered_query = []
     for key, value in query_pairs:
         if key == "pages":
@@ -140,6 +140,8 @@ def fetch_wendys(url: str):
             job = _normalize_job(session, job_url)
             if job:
                 jobs.append(job)
-                time.sleep(0.3)  # short pause to avoid hammering the site
+                if max_jobs and len(jobs) >= max_jobs:
+                    return jobs
+                time.sleep(0.15)  # short pause to avoid hammering the site
 
     return jobs

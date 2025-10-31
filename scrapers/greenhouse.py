@@ -1,15 +1,11 @@
 # scrapers/greenhouse.py
 import requests
 
-def fetch_greenhouse(slug: str, company_name: str | None = None):
-    """
-    Busca vagas no Greenhouse para o board informado.
-    Retorna SEMPRE uma lista de dicionários com:
-    source, external_id, title, company, description, location, salary, url
-    """
+
+def fetch_greenhouse(slug: str, company: str | None = None):
     url = f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs"
     try:
-        resp = requests.get(url, timeout=20)
+        resp = requests.get(url, timeout=15)
         resp.raise_for_status()
     except Exception as e:
         print(f"[greenhouse] erro ao buscar {slug}: {e}")
@@ -17,31 +13,30 @@ def fetch_greenhouse(slug: str, company_name: str | None = None):
 
     try:
         data = resp.json()
-    except Exception:
-        print(f"[greenhouse] resposta não é JSON para {slug}")
+    except Exception as exc:
+        print(f"[greenhouse] resposta inválida para {slug}: {exc}")
         return []
-
-    jobs = data.get("jobs", [])
+    jobs = data.get("jobs") or []
     out = []
-
     for job in jobs:
-        title = job.get("title") or "Untitled"
-        abs_url = job.get("absolute_url") or ""
-        desc = job.get("content") or ""
-        loc = ""
-        if isinstance(job.get("location"), dict):
-            loc = job["location"].get("name", "") or ""
-        external_id = job.get("id") or ""
+        title = job.get("title") or "Greenhouse Job"
+        locs = job.get("location") or {}
+        loc = locs.get("name") or ""
+        apply_url = job.get("absolute_url") or job.get("url") or ""
 
         out.append({
             "source": "greenhouse",
-            "external_id": str(external_id),
+            "external_id": str(job.get("id") or ""),
             "title": title,
-            "company": company_name or slug,
-            "description": desc,
-            "location": loc,
+            "company": company or slug,
+            "description": job.get("content") or "",
+            "city": loc,
+            "state": "",
+            "country": "",
             "salary": "",
-            "url": abs_url,
+            "url": apply_url,
+            "category": "other",
+            "priority": 10,
+            "active": True,
         })
-
     return out
