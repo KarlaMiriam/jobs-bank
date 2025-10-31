@@ -1,64 +1,66 @@
-# main.py (trecho principal)
-
-from db import init_db, upsert_job, mark_missing_as_inactive
-from normalize import normalize_job
+# main.py
 from sources import SOURCES
-from scrapers import (
-    fetch_mchire,
-    fetch_workday,
-    fetch_greenhouse,
-    fetch_lever,
-    fetch_ihg,
-    fetch_hilton_html,
-    fetch_walmart,
-    fetch_icims,
-)
+from normalize import normalize_job
+from db import init_db, upsert_job, get_active_jobs_ordered
+
+from scrapers.mchire import fetch_mchire
+from scrapers.workday import fetch_workday
+from scrapers.greenhouse import fetch_greenhouse
+from scrapers.lever import fetch_lever
+from scrapers.ihg import fetch_ihg
+from scrapers.hilton_html import fetch_hilton_html
+from scrapers.walmart import fetch_walmart
+from scrapers.icims import fetch_icims
+
 
 def main():
     print("🟣 JobBot iniciando coleta...")
-    init_db()
+    init_db()  # garante tabela no Render
 
-    all_urls = []
+    total_new = 0
 
     for src in SOURCES:
         t = src["type"]
 
         if t == "mchire":
-            raw_jobs = fetch_mchire(src["url"])
+            jobs = fetch_mchire(src["url"])
         elif t == "workday":
-            raw_jobs = fetch_workday(src["url"], employer=src.get("company"))
+            jobs = fetch_workday(src["url"], employer=src.get("company"))
         elif t == "greenhouse":
-            raw_jobs = fetch_greenhouse(src["slug"], company=src.get("company"))
+            jobs = fetch_greenhouse(src["slug"], company=src.get("company"))
         elif t == "lever":
-            raw_jobs = fetch_lever(
+            jobs = fetch_lever(
                 src["company"],
                 include_departments=src.get("include_departments"),
                 include_keywords=src.get("include_keywords"),
                 exclude_keywords=src.get("exclude_keywords"),
             )
         elif t == "ihg":
-            raw_jobs = fetch_ihg(src["url"])
+            jobs = fetch_ihg(src["url"])
         elif t == "hilton-html":
-            raw_jobs = fetch_hilton_html(src["url"])
+            jobs = fetch_hilton_html(src["url"])
         elif t == "walmart":
-            raw_jobs = fetch_walmart(src["url"])
+            jobs = fetch_walmart(src["url"])
         elif t == "icims":
-            raw_jobs = fetch_icims(src["url"])
+            jobs = fetch_icims(src["url"])
         else:
-            raw_jobs = []
+            print(f"[coletor] tipo não suportado: {t}")
+            jobs = []
 
-        print(f"✅ {src['name']}: {len(raw_jobs)} vagas (brutas)")
+        print(f"✅ {src['name']}: {len(jobs)} vagas (brutas)")
 
-        for r in raw_jobs:
-            norm = normalize_job(r)
-            if not norm:
-                continue  # não tem link
+        for j in jobs:
+            norm = normalize_job(j)
+            # só salva se tiver link
+            if not norm.get("url"):
+                continue
             upsert_job(norm)
-            all_urls.append(norm["url"])
+            total_new += 1
 
-    # marca as que não vieram como inativas
-    mark_missing_as_inactive(all_urls)
-    print(f"📦 vagas ativas agora: {len(all_urls)}")
+    active = get_active_jobs_ordered()
+    print(f"📦 vagas ativas agora: {len(active)}")
+    for i, r in enumerate(active[:25]):
+        print(f"[{r.get('priority', 0)}] {r.get('title')} – {r.get('company')} -> {r.get('url')}")
 
 
 if __name__ == "__main__":
