@@ -1,55 +1,77 @@
 # scrapers/mchire.py
+from __future__ import annotations
 import requests
-import re
 
-LINK_RE = re.compile(
-    r'<a[^>]*href="(https?:\/\/www\.mchire\.com[^"]+|www\.mchire\.com[^"]+)"[^>]*>([^<]+)</a>'
-)
+API_URL = "https://www.mchire.com/api/v1/jobs"
 
-def fetch_mchire(base_url: str, max_pages: int = 20):
-    all_jobs = []
+def fetch_mchire(max_pages: int = 50):
+    """
+    McHire às vezes devolve HTML em vez de JSON. Aqui a gente tenta JSON,
+    se não for JSON a gente só para (mas não quebra o coletor).
+    """
+    jobs = []
+    session = requests.Session()
+    session.headers.update({"User-Agent": "Mozilla/5.0 (JobBot)"})
+
+    empty_in_a_row = 0
 
     for page in range(1, max_pages + 1):
-        url = base_url if page == 1 else f"{base_url}/page/{page}"
+        try:
+            resp = session.get(f"{API_URL}?page={page}", timeout=15)
+        except Exception as e:
+            print(f"[McHire] erro HTTP na página {page}: {e}")
+            empty_in_a_row += 1
+            if empty_in_a_row >= 3:
+                print("[McHire] 3 páginas seguidas com erro HTTP, parando.")
+                break
+            continue
+
+        # às vezes ele devolve HTML, não JSON
+        ct = resp.headers.get("content-type", "")
+        if "application/json" not in ct:
+            print(f"[McHire] página {page} não retornou JSON")
+            empty_in_a_row += 1
+            if empty_in_a_row >= 3:
+                print("[McHire] 3 páginas seguidas sem JSON, encerrando só McHire.")
+                break
+            continue
 
         try:
-            resp = requests.get(url, timeout=20, headers={"User-Agent": "Mozilla/5.0"})
+            data = resp.json()
         except Exception:
-            break
+            print(f"[McHire] página {page} não pôde ser parseada como JSON")
+            empty_in_a_row += 1
+            if empty_in_a_row >= 3:
+                print("[McHire] 3 páginas seguidas sem JSON, encerrando só McHire.")
+                break
+            continue
 
-        if resp.status_code != 200:
-            break
+        items = data.get("jobs") or data.get("items") or []
+        if not items:
+            empty_in_a_row += 1
+            if empty_in_a_row >= 3:
+                print("[McHire] 3 páginas seguidas vazias, encerrando.")
+                break
+            continue
 
-        html = resp.text
-        page_jobs = _parse_mchire(html)
-        print(f"[McHire] page {page}: {len(page_jobs)} jobs")
+        empty_in_a_row = 0
 
-        if not page_jobs:
-            break
+        for j in items:
+            url = j.get("job_url") or j.get("url")
+            if not url:
+                # agora só URL é obrigatório
+                continue
 
-        all_jobs.extend(page_jobs)
+            jobs.append({
+                "source": "mchire",
+                "external_id": str(j.get("id") or ""),
+                "title": j.get("title") or j.get("position") or "McDonald's Job",
+                "company": j.get("company") or "McDonald's",
+                "description": j.get("description") or "",
+                "location": j.get("location") or "",
+                "salary": j.get("salary") or "",
+                "url": url,
+            })
 
-    return all_jobs
-
-def _parse_mchire(html: str):
-    jobs = []
-    for m in LINK_RE.finditer(html):
-        href = m.group(1)
-        title = m.group(2).strip()
-
-        if href.startswith("www."):
-            href = "https://" + href
-
-        href = href.replace("&#x27;", "'").replace("&amp;", "&")
-
-        jobs.append({
-            "source": "mchire",
-            "external_id": "",
-            "title": title,
-            "company": "McDonald's",
-            "description": "",
-            "location": "",
-            "salary": "",
-            "url": href,
-        })
+    print(f"✅ McDonald's (McHire): {len(jobs)} vagas (brutas)")
     return jobs
