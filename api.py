@@ -1,5 +1,4 @@
 # api.py
-
 from typing import Optional
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,11 +17,12 @@ app = FastAPI(title="EB3 Jobs API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # depois troca pro domínio do Lovable
+    allow_origins=["*"],  # troque depois pro domínio do Lovable
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 def _sort_rows(rows):
     def key(r):
@@ -31,14 +31,26 @@ def _sort_rows(rows):
         category = (r["category"] or "").lower()
         priority = r["priority"] or 0
 
+        # 0 – McDonald's primeiro
         if source == "mchire" or "mcdonald" in company:
             return (0, -priority)
-        if category == "hotel" or "hotel" in company or "resort" in company:
+
+        # 1 – hotelaria
+        if category == "hotel" or "hotel" in company or "resort" in company or "marriott" in company or "hilton" in company or "ihg" in company:
             return (1, -priority)
-        if category in ("agriculture", "landscaping", "food_processing"):
+
+        # 2 – food service / restaurante / wendys / cafeteria
+        if category == "restaurant" or "wendy" in company or "food" in category:
             return (2, -priority)
+
+        # 3 – warehouse / cleaning / retail
+        if category in ("retail", "cleaning", "janitorial", "warehouse"):
+            return (3, -priority)
+
+        # 9 – tech low priority
         if company in LOW_PRIORITY_COMPANIES:
             return (9, -priority)
+
         return (5, -priority)
     return sorted(rows, key=key)
 
@@ -54,6 +66,7 @@ def get_jobs(
     company: Optional[str] = None,
     source: Optional[str] = None,
     q: Optional[str] = None,
+    only_us: bool = True,
 ):
     rows = get_active_jobs_ordered()
     rows = _sort_rows(rows)
@@ -66,14 +79,19 @@ def get_jobs(
             continue
         if q and q.lower() not in (r["title"] or "").lower():
             continue
+        if only_us and r.get("country") and r["country"].upper() not in ("US", "USA"):
+            # se for hotel/fast-food mas veio sem country, não derruba
+            comp = (r["company"] or "").lower()
+            if not ("mcdonald" in comp or "wendy" in comp or "hilton" in comp or "marriott" in comp or "ihg" in comp):
+                continue
 
         items.append({
             "title": r["title"],
             "company": r["company"],
-            "description": r["description"],
+            "description": r["description"] or "Job description not available.",
             "city": r["city"],
             "state": r["state"],
-            "country": r["country"],
+            "country": r["country"] or "US",
             "salary": r["salary"],
             "url": r["url"],
             "category": r["category"],
