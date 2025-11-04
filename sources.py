@@ -4,7 +4,8 @@ SOURCES = [
     {"type": "greenhouse", "name": "HelloFresh US (Greenhouse)", "slug": "hellofresh", "company": "HelloFresh"},
 
     # McDonald's – agora por HTML
-    {"type": "mchire", "name": "McDonald's (McHire)", "url": "https://www.mchire.com/jobs"},
+   {"type": "mchire", "name": "McDonald's (McHire)",
+     "url": "https://jobs.mchire.com/jobs?location_name=United%20States&location_type=4"},
 
     # Workday (podem falhar, mas não travam o robô)
     {"type": "workday", "name": "Marriott (Workday)", "company": "Marriott", "url": "https://marriott.wd5.myworkdayjobs.com/MarriottCareers"},
@@ -26,4 +27,27 @@ SOURCES = [
 
     # iCIMS
     {"type": "icims", "name": "Grimmway - Maintenance Mechanic", "url": "https://careers-grimmway.icims.com/jobs/20801/maintenance-mechanic/job"},
+
+     # Adzuna (EUA)
+    # Termos focados em EB-3/subempregos
+{"type": "adzuna-bulk", "name": "Adzuna bulk A", "queries": [
+  "housekeeper","room attendant","janitor","cleaner","housekeeping",
+  "dishwasher","line cook","prep cook","fast food","restaurant crew"
+], "pages": 5},
+
+{"type": "adzuna-bulk", "name": "Adzuna bulk B", "queries": [
+  "warehouse associate","picker packer","general labor","loader","unloader",
+  "maintenance","groundskeeper","laundry attendant"
+], "pages": 5},
+
+{"type": "adzuna-bulk", "name": "Adzuna bulk C", "queries": [
+  "hotel","front desk","busser","server","barback","cook","food prep"
+], "pages": 5},
+
+{"type": "adzuna-bulk", "name": "Adzuna bulk D", "queries": [
+  "caregiver","nursing aide","food service worker","cafeteria","buffet attendant"
+], "pages": 5},
+
+
+
 ]

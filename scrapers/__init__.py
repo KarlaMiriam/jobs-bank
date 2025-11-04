@@ -5,6 +5,7 @@ from .ihg import fetch_ihg
 from .hilton_html import fetch_hilton_html
 from .walmart import fetch_walmart
 from .icims import fetch_icims
+from .adzuna import fetch_adzuna
 
 __all__ = [
     "fetch_mchire",

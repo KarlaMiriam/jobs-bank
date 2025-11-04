@@ -1,11 +1,16 @@
 services:
   - type: web
-    name: jobs-bank
+    name: jobbot
     env: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "uvicorn api:app --host 0.0.0.0 --port $PORT"
-    region: oregon
-    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api:app --host 0.0.0.0 --port $PORT
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
       - key: PYTHONPATH
         value: .
+      # defina as duas abaixo no painel do Render (marcadas como secrets)
+      - key: ADZUNA_APP_ID
+        sync: false
+      - key: ADZUNA_APP_KEY
+        sync: false
