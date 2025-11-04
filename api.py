@@ -1,16 +1,15 @@
 # api.py
-import os
-import sqlite3
-from typing import List, Optional
-
-from fastapi import FastAPI, HTTPException, Query
+from __future__ import annotations
+from typing import List, Dict, Any, Optional
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from db import get_conn
+import sqlite3
+import math
 
-DB_PATH = os.getenv("DB_PATH", os.path.join(os.getcwd(), "jobs.db"))
+app = FastAPI(title="JobBot API")
 
-app = FastAPI(title="JobBot API", version="1.0.0")
-
+# CORS – ajuste allow_origins para o domínio do seu Lovable se quiser restringir
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -19,134 +18,127 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------- utils de DB ----------
+def row_to_dict(row: sqlite3.Row) -> Dict[str, Any]:
+    return {k: row[k] for k in row.keys()}
 
-def get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+def _compose_where(filters: Dict[str, Optional[str]]) -> (str, list):
+    """
+    Monta WHERE dinâmico para filtros simples.
+    Filtros suportados: q (busca), state, category, source, company.
+    """
+    clauses = ["active = 1"]
+    params: List[Any] = []
 
-def rows_to_dicts(rows: List[sqlite3.Row]) -> List[dict]:
-    out = []
-    for r in rows:
-        # sqlite3.Row é indexável por coluna
-        out.append({k: r[k] for k in r.keys()})
-    return out
+    q = filters.get("q")
+    if q:
+        clauses.append("(title LIKE ? OR company LIKE ? OR description LIKE ? OR city LIKE ?)")
+        like = f"%{q}%"
+        params += [like, like, like, like]
 
-# ---------- modelos ----------
+    state = filters.get("state")
+    if state:
+        clauses.append("state = ?")
+        params.append(state)
 
-class Job(BaseModel):
-    url: str
-    title: Optional[str] = None
-    company: Optional[str] = None
-    description: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
-    country: Optional[str] = None
-    salary: Optional[str] = None
-    category: Optional[str] = None
-    priority: Optional[int] = None
-    active: Optional[int] = 1
-    source: Optional[str] = None
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
+    category = filters.get("category")
+    if category:
+        clauses.append("category = ?")
+        params.append(category)
 
-# ---------- rotas ----------
+    source = filters.get("source")
+    if source:
+        clauses.append("source = ?")
+        params.append(source)
 
-@app.get("/health")
-def health():
-    # também valida se a tabela existe
-    try:
-        with get_conn() as conn:
-            conn.execute("SELECT 1 FROM jobs LIMIT 1")
-        return {"ok": True}
-    except sqlite3.OperationalError as e:
-        return {"ok": False, "detail": f"DB not ready: {e}"}
+    company = filters.get("company")
+    if company:
+        clauses.append("company = ?")
+        params.append(company)
 
-@app.get("/stats")
-def stats():
-    with get_conn() as conn:
-        total = conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
-        active = conn.execute("SELECT COUNT(*) FROM jobs WHERE active=1").fetchone()[0]
-        us = conn.execute("SELECT COUNT(*) FROM jobs WHERE country='US' OR country='USA' OR country='United States'").fetchone()[0]
-    return {"total": total, "active": active, "us": us}
+    where = " WHERE " + " AND ".join(clauses) if clauses else ""
+    return where, params
 
-@app.get("/jobs", response_model=dict)
+@app.get("/jobs")
 def get_jobs(
-    q: Optional[str] = Query(default=None, description="Busca em título/descrição/empresa/cidade/estado"),
-    state: Optional[str] = Query(default=None),
-    city: Optional[str] = Query(default=None),
-    country: Optional[str] = Query(default=None),
-    source: Optional[str] = Query(default=None),
-    active: Optional[bool] = Query(default=True),
-    limit: int = Query(default=200, ge=1, le=1000),
-    offset: int = Query(default=0, ge=0),
+    limit: int = Query(50, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    q: Optional[str] = None,
+    state: Optional[str] = None,
+    category: Optional[str] = None,
+    source: Optional[str] = None,
+    company: Optional[str] = None,
+    order: str = Query("updated_at_desc", description="updated_at_desc|priority_desc|created_at_desc"),
 ):
     """
-    Retorna JSON:
-      {"count": N, "items": [ ... ]}
-    Ordenado por prioridade desc e updated_at desc (quando houver).
+    Lista vagas ativas com paginação e filtros.
     """
-    try:
-        where = []
-        params: List[object] = []
+    order_by = {
+        "updated_at_desc": "updated_at DESC",
+        "created_at_desc": "created_at DESC",
+        "priority_desc": "priority DESC, updated_at DESC",
+    }.get(order, "updated_at DESC")
 
-        if active is not None:
-            where.append("active = ?")
-            params.append(1 if active else 0)
+    where, params = _compose_where({
+        "q": q, "state": state, "category": category, "source": source, "company": company
+    })
 
-        if q:
-            like = f"%{q}%"
-            where.append("(title LIKE ? OR description LIKE ? OR company LIKE ? OR city LIKE ? OR state LIKE ?)")
-            params.extend([like, like, like, like, like])
+    with get_conn() as conn:
+        conn.row_factory = sqlite3.Row
+        # total geral p/ os mesmos filtros
+        cur = conn.execute(f"SELECT COUNT(*) as c FROM jobs {where}", params)
+        total = cur.fetchone()["c"]
 
-        if state:
-            where.append("state = ?")
-            params.append(state)
+        cur = conn.execute(
+            f"""
+            SELECT id, url, title, company, description, city, state, country,
+                   salary, category, priority, active, source, created_at, updated_at
+            FROM jobs
+            {where}
+            ORDER BY {order_by}
+            LIMIT ? OFFSET ?
+            """,
+            params + [limit, offset],
+        )
+        rows = [row_to_dict(r) for r in cur.fetchall()]
 
-        if city:
-            where.append("city = ?")
-            params.append(city)
+    # Retorne também metadados úteis para o front
+    return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "pages": math.ceil(total / limit) if limit else 1,
+        "items": rows,
+    }
 
-        if country:
-            # aceita US / USA / United States
-            where.append("(country = ? OR country = ? OR country = ?)")
-            params.extend([country, country.upper(), "United States" if country.upper() in ("US", "USA") else country])
+@app.get("/stats")
+def get_stats():
+    """
+    Retorna contagens para o painel (total de ativas e por fonte).
+    """
+    with get_conn() as conn:
+        conn.row_factory = sqlite3.Row
+        total = conn.execute("SELECT COUNT(*) as c FROM jobs WHERE active = 1").fetchone()["c"]
+        by_source = conn.execute("""
+            SELECT source, COUNT(*) as c
+            FROM jobs
+            WHERE active = 1
+            GROUP BY source
+            ORDER BY c DESC
+        """).fetchall()
+        by_category = conn.execute("""
+            SELECT COALESCE(category, '') as category, COUNT(*) as c
+            FROM jobs
+            WHERE active = 1
+            GROUP BY COALESCE(category, '')
+            ORDER BY c DESC
+        """).fetchall()
 
-        if source:
-            where.append("source = ?")
-            params.append(source)
+    return {
+        "total_active": total,
+        "by_source": [row_to_dict(r) for r in by_source],
+        "by_category": [row_to_dict(r) for r in by_category],
+    }
 
-        where_sql = f"WHERE {' AND '.join(where)}" if where else ""
-
-        # COUNT
-        with get_conn() as conn:
-            cnt_row = conn.execute(f"SELECT COUNT(*) AS c FROM jobs {where_sql}", params).fetchone()
-            total = int(cnt_row["c"] if isinstance(cnt_row, sqlite3.Row) else cnt_row[0])
-
-            # ORDER BY: prioridade desc, updated_at desc (NULLS LAST), created_at desc, title asc
-            sql = f"""
-                SELECT url, title, company, description, city, state, country, salary,
-                       category, priority, active, source, created_at, updated_at
-                FROM jobs
-                {where_sql}
-                ORDER BY
-                    COALESCE(priority, 0) DESC,
-                    CASE WHEN updated_at IS NULL THEN 1 ELSE 0 END,
-                    updated_at DESC,
-                    CASE WHEN created_at IS NULL THEN 1 ELSE 0 END,
-                    created_at DESC,
-                    COALESCE(title, '') ASC
-                LIMIT ? OFFSET ?
-            """
-            items = conn.execute(sql, (*params, limit, offset)).fetchall()
-
-        return {
-            "count": total,
-            "items": rows_to_dicts(items),
-        }
-    except Exception as e:
-        # Loga no console e devolve 500 amigável
-        print("[/jobs] erro:", repr(e))
-        raise HTTPException(status_code=500, detail=f"Internal error: {e}")
-
+@app.get("/")
+def root():
+    return {"ok": True, "service": "JobBot API"}

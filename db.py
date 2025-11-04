@@ -30,8 +30,10 @@ CREATE_INDEXES = [
 ]
 
 def get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    conn = sqlite3.connect(str(DB_PATH))
+    conn.row_factory = sqlite3.Row          # ⬅️ importante!
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA synchronous=NORMAL;")
     return conn
 
 def _table_columns(conn: sqlite3.Connection, table: str) -> List[str]:
