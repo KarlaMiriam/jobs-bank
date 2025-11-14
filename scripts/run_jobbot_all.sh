@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# No Render, o app normalmente fica em /app
-cd /app
+# Removemos o cd /app – no Render o working dir já é a raiz do projeto
 
 echo "🚀 Iniciando coleta de vagas EB3 (EUA)..."
 python main.py
