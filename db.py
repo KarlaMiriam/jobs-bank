@@ -167,6 +167,44 @@ def get_active_jobs_ordered() -> List[sqlite3.Row]:
             ORDER BY priority DESC, created_at DESC
         """)
         return cur.fetchall()
+    
+def get_active_jobs_by_country(country_code: str) -> List[sqlite3.Row]:
+    """
+    Retorna vagas ativas filtrando pelo campo country (US, CA, etc).
+    """
+    with get_conn() as conn:
+        cur = conn.execute("""
+            SELECT url, title, company, description, city, state, country, salary,
+                   category, priority, active, source, created_at, updated_at
+            FROM jobs
+            WHERE active = 1
+              AND UPPER(country) = UPPER(?)
+            ORDER BY priority DESC, created_at DESC
+        """, (country_code,))
+        return cur.fetchall()
+
+
+def get_jobs_count_by_country(country_code: str, only_active: bool = True) -> int:
+    """
+    Conta vagas por país (ex: 'CA' para Canadá).
+    """
+    with get_conn() as conn:
+        if only_active:
+            row = conn.execute("""
+                SELECT COUNT(*) AS c
+                FROM jobs
+                WHERE active = 1
+                  AND UPPER(country) = UPPER(?)
+            """, (country_code,)).fetchone()
+        else:
+            row = conn.execute("""
+                SELECT COUNT(*) AS c
+                FROM jobs
+                WHERE UPPER(country) = UPPER(?)
+            """, (country_code,)).fetchone()
+
+        return int(row["c"] if isinstance(row, sqlite3.Row) else row[0])
+
 
 def get_jobs_count(conn: Optional[sqlite3.Connection] = None, only_active: bool = True) -> int:
     close_after = False
@@ -182,3 +220,41 @@ def get_jobs_count(conn: Optional[sqlite3.Connection] = None, only_active: bool 
     finally:
         if close_after:
             conn.close()
+
+def get_active_jobs_by_country(country_code: str) -> List[sqlite3.Row]:
+        """
+        Retorna vagas ativas filtrando pelo campo country (US, CA, etc).
+        """
+        with get_conn() as conn:
+            cur = conn.execute("""
+                SELECT url, title, company, description, city, state, country, salary,
+                    category, priority, active, source, created_at, updated_at
+                FROM jobs
+                WHERE active = 1
+                AND UPPER(country) = UPPER(?)
+                ORDER BY priority DESC, created_at DESC
+            """, (country_code,))
+            return cur.fetchall()
+
+
+def get_jobs_count_by_country(country_code: str, only_active: bool = True) -> int:
+    """
+    Conta vagas por país (ex: 'CA' para Canadá).
+    """
+    with get_conn() as conn:
+        if only_active:
+            row = conn.execute("""
+                SELECT COUNT(*) AS c
+                FROM jobs
+                WHERE active = 1
+                  AND UPPER(country) = UPPER(?)
+            """, (country_code,)).fetchone()
+        else:
+            row = conn.execute("""
+                SELECT COUNT(*) AS c
+                FROM jobs
+                WHERE UPPER(country) = UPPER(?)
+            """, (country_code,)).fetchone()
+
+        return int(row["c"] if isinstance(row, sqlite3.Row) else row[0])
+
